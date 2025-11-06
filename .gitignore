@@ -1,7 +1,15 @@
-# outputs
+# outputs (skill-generated slides)
 slides/
+
+# Quarto/LaTeX outputs
 *.html
 *.pdf
+*.tex
+*.qmd
+
+# Quarto cache and temporary files
+/.quarto/
+*_files/
 
 # Python
 __pycache__/
