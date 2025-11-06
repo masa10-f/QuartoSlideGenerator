@@ -194,4 +194,4 @@ cp -r .claude/skills/quarto-task-slides ~/.claude/skills/
 
 ## ライセンス
 
-お好みのライセンスを指定してください。
+MIT License - 詳細は [LICENSE](LICENSE) ファイルを参照してください。
