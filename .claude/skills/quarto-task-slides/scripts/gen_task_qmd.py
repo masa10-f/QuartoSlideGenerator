@@ -26,8 +26,8 @@ def parse_args():
     ap.add_argument("--title", default="")
     ap.add_argument("--out", required=True)
     ap.add_argument("--format", default="html", choices=["html","pdf"])
-    ap.add_argument("--summary-mode", default="none", choices=["none","template","ai","manual","extract"],
-                    help="Summary generation mode (default: none)")
+    ap.add_argument("--summary-mode", default="ai", choices=["none","template","ai","manual","extract"],
+                    help="Summary generation mode (default: ai)")
     ap.add_argument("--summary-api-key", default="", help="API key for AI mode (or use ANTHROPIC_API_KEY env)")
     ap.add_argument("--summary-dir", default="", help="Directory for manual summaries (default: .commit-summaries)")
     return ap.parse_args()

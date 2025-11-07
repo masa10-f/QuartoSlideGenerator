@@ -28,7 +28,7 @@ version: 2.0.0
 - `title`（任意）
 - `format`（`html` | `pdf`、既定 `html`）
 - `outdir`（既定 `slides/`）
-- `summary_mode`（既定 `none`）: `none` | `template` | `ai` | `manual` - コミットサマリー生成モード
+- `summary_mode`（既定 `ai`）: `none` | `template` | `ai` | `manual` - コミットサマリー生成モード
 - `summary_api_key`（任意）: AI モード用の API キー（環境変数 `ANTHROPIC_API_KEY` も利用可）
 - `summary_dir`（任意）: 手動サマリーファイル用ディレクトリ（既定 `.commit-summaries/`）
 
@@ -38,11 +38,11 @@ version: 2.0.0
 
 ### サマリーモード
 
-1. **`none`（既定）**: サマリーを生成しない
+1. **`none`**: サマリーを生成しない
 2. **`template`**: コミットメッセージ本文から構造化情報を抽出
    - リスト形式の情報（`-`, `*`, `+` で始まる行）を自動認識
    - 詳細な説明文を含める
-3. **`ai`**: Claude API を使用して自動生成（`anthropic` パッケージが必要）
+3. **`ai`（既定）**: Claude Code を使用して自動生成（Claude Code環境ではAPIキー不要）
    - コミットメッセージ、diffstat、コード変更から包括的な要約を生成
    - 非技術系ステークホルダーにもわかりやすい説明
    - 何が変更され、なぜ変更されたかを明確化

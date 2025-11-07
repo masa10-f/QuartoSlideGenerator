@@ -8,7 +8,7 @@ The quarto-task-slides skill now supports automatic generation of natural langua
 
 ### Summary Modes
 
-1. **None (default)**: No summary generation
+1. **None**: No summary generation (use `--summary-mode none` to disable)
 2. **Template Mode**: Extracts structured information from commit message bodies
 3. **AI Mode**: Uses Claude API to generate comprehensive summaries
 4. **Manual Mode**: Loads pre-written summaries from files
@@ -30,15 +30,20 @@ bash .claude/skills/quarto-task-slides/scripts/task_slides.sh \
 - Commits following conventional commit format
 - Quick summaries without API costs
 
-### 2. AI Mode
+### 2. AI Mode (Default)
 
 Uses Claude to generate intelligent summaries from commit data.
 
-#### In Claude Code Environment (Recommended)
+#### In Claude Code Environment (Default Behavior)
 
-When using Claude Code, **no API key is required**! Claude Code automatically generates summaries.
+When using Claude Code, **no API key is required**! Claude Code automatically generates summaries by default.
 
 ```bash
+# AI mode is now the default - no --summary-mode flag needed
+bash .claude/skills/quarto-task-slides/scripts/task_slides.sh \
+  --since origin/main --until HEAD
+
+# Or explicitly specify:
 bash .claude/skills/quarto-task-slides/scripts/task_slides.sh \
   --since origin/main --until HEAD \
   --summary-mode ai
