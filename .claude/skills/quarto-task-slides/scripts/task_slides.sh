@@ -15,6 +15,9 @@ MAX_PATCH_LINES="600"
 TITLE=""
 FORMAT="html"
 OUTDIR="slides"
+SUMMARY_MODE="none"
+SUMMARY_API_KEY=""
+SUMMARY_DIR=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -29,6 +32,9 @@ while [[ $# -gt 0 ]]; do
     --title) TITLE="$2"; shift 2;;
     --format) FORMAT="$2"; shift 2;;         # html | pdf
     --outdir) OUTDIR="$2"; shift 2;;
+    --summary-mode) SUMMARY_MODE="$2"; shift 2;;       # none | template | ai | manual
+    --summary-api-key) SUMMARY_API_KEY="$2"; shift 2;; # API key for AI mode
+    --summary-dir) SUMMARY_DIR="$2"; shift 2;;         # Directory for manual summaries
     *) echo "Unknown arg: $1"; exit 1;;
   esac
 done
@@ -58,6 +64,9 @@ python3 "$SCRIPT_DIR/gen_task_qmd.py" \
   --out "$QMD_PATH" \
   --format "$FORMAT" \
   --max-patch-lines "$MAX_PATCH_LINES" \
+  --summary-mode "$SUMMARY_MODE" \
+  ${SUMMARY_API_KEY:+--summary-api-key "$SUMMARY_API_KEY"} \
+  ${SUMMARY_DIR:+--summary-dir "$SUMMARY_DIR"} \
   $( [[ "$INCLUDE_DIFF" == "true" ]] && echo "--include-diff" )
 
 # Quarto render

@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-import argparse, os, subprocess, datetime, collections
+import argparse, os, subprocess, datetime, collections, json
+try:
+    import anthropic
+    HAS_ANTHROPIC = True
+except ImportError:
+    HAS_ANTHROPIC = False
 
 def sh(cmd, cwd=None):
     p = subprocess.run(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -21,6 +26,10 @@ def parse_args():
     ap.add_argument("--title", default="")
     ap.add_argument("--out", required=True)
     ap.add_argument("--format", default="html", choices=["html","pdf"])
+    ap.add_argument("--summary-mode", default="none", choices=["none","template","ai","manual"],
+                    help="Summary generation mode (default: none)")
+    ap.add_argument("--summary-api-key", default="", help="API key for AI mode (or use ANTHROPIC_API_KEY env)")
+    ap.add_argument("--summary-dir", default="", help="Directory for manual summaries (default: .commit-summaries)")
     return ap.parse_args()
 
 def default_since(repo):
@@ -79,6 +88,148 @@ def top_files(commits_files, topn=10):
         cnt.update(f for f in files if f)
     return cnt.most_common(topn)
 
+def get_commit_body(repo, sha):
+    """Get the full commit message body (excluding subject)"""
+    try:
+        # Get commit message body (everything after first line)
+        out = sh(["git", "log", "-1", "--pretty=format:%b", sha], cwd=repo)
+        return out.strip()
+    except Exception:
+        return ""
+
+def extract_template_summary(commit_subject, commit_body):
+    """Extract summary information from commit message body"""
+    if not commit_body:
+        return ""
+
+    # Look for structured information in commit body
+    lines = commit_body.split("\n")
+    summary_parts = []
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        # Common patterns in commit messages
+        if line.startswith("* ") or line.startswith("- "):
+            summary_parts.append(line[2:])
+        elif line.startswith("+ "):
+            summary_parts.append(line[2:])
+        elif len(line) > 20 and not line.startswith("#"):  # Meaningful description
+            summary_parts.append(line)
+
+    if summary_parts:
+        return "\n\n".join(f"- {part}" if not part.startswith("-") else part
+                          for part in summary_parts[:5])  # Limit to 5 items
+    return ""
+
+def generate_ai_summary(commit_subject, commit_body, diffstat, patch_preview, api_key):
+    """Generate AI summary using Claude API"""
+    if not HAS_ANTHROPIC:
+        return "⚠ AI summary unavailable: anthropic package not installed (pip install anthropic)"
+
+    if not api_key:
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            return "⚠ AI summary unavailable: No API key provided"
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+
+        # Prepare context for AI
+        context = f"""Commit Subject: {commit_subject}
+
+Commit Body:
+{commit_body if commit_body else "(no additional description)"}
+
+Diffstat:
+{diffstat}
+
+Code Changes (preview):
+{patch_preview[:2000] if patch_preview else "(no patch preview)"}
+"""
+
+        prompt = """You are analyzing a Git commit to create a natural language summary for stakeholders.
+
+Based on the commit information provided, generate a concise summary that explains:
+1. What functionality was added/modified/removed (2-3 bullet points)
+2. Why the change was made (if inferable)
+3. Key highlights that would matter to non-technical stakeholders
+
+Format your response as markdown with bullet points. Be concise but informative. Focus on the "what" and "why" rather than technical implementation details.
+
+Do not include headers - just the bullet points."""
+
+        response = client.messages.create(
+            model="claude-3-5-sonnet-20241022",
+            max_tokens=500,
+            messages=[
+                {"role": "user", "content": context + "\n\n" + prompt}
+            ]
+        )
+
+        # Extract text from response
+        summary = response.content[0].text.strip()
+        return summary
+
+    except Exception as e:
+        return f"⚠ AI summary generation failed: {str(e)}"
+
+def load_manual_summary(repo, sha, summary_dir):
+    """Load manual summary from file"""
+    if not summary_dir:
+        summary_dir = os.path.join(repo, ".commit-summaries")
+
+    # Try both full SHA and short SHA
+    for commit_id in [sha, sha[:7]]:
+        summary_path = os.path.join(summary_dir, f"{commit_id}.md")
+        if os.path.isfile(summary_path):
+            try:
+                with open(summary_path, "r", encoding="utf-8") as f:
+                    return f.read().strip()
+            except Exception:
+                pass
+    return ""
+
+def generate_summary(repo, commit, diffstat, patch_preview, args):
+    """Generate summary based on configured mode (hybrid approach)"""
+    sha = commit["sha"]
+    subject = commit["subject"]
+
+    # Get commit body
+    body = get_commit_body(repo, sha)
+
+    # Try modes in order based on configuration
+    mode = args.summary_mode
+
+    if mode == "none":
+        return ""
+
+    # Manual mode: try to load from file first
+    if mode == "manual":
+        manual = load_manual_summary(repo, sha, args.summary_dir)
+        if manual:
+            return manual
+        return "⚠ No manual summary found"
+
+    # Template mode: extract from commit body
+    if mode == "template":
+        template = extract_template_summary(subject, body)
+        if template:
+            return template
+        # Fall back to showing commit body if structured extraction failed
+        if body:
+            return body
+        return "_No structured information found in commit message_"
+
+    # AI mode: generate using Claude API
+    if mode == "ai":
+        # Try AI generation
+        ai_summary = generate_ai_summary(subject, body, diffstat, patch_preview, args.summary_api_key)
+        return ai_summary
+
+    return ""
+
 def fm(title):
     return f"""---
 title: "{title}"
@@ -134,6 +285,19 @@ def build_qmd(repo, args, commits):
         stat = diffstat_for_commit(repo, c["sha"], args.paths)
         q.append(f"### {md(c['short'])} — {md(c['subject'])}\n")
         q.append(f"`{md(c['date'])}` / {md(c['author'])}\n\n")
+
+        # Generate summary if enabled
+        if args.summary_mode != "none":
+            # Get patch preview for AI mode
+            patch_preview = ""
+            if args.summary_mode == "ai":
+                patch_preview = patch_for_commit(repo, c["sha"], args.paths, 500)
+
+            summary = generate_summary(repo, c, stat, patch_preview, args)
+            if summary:
+                q.append("**Summary:**\n\n")
+                q.append(summary + "\n\n")
+
         q.append("```text\n" + stat + "\n```\n\n")
     q.append("\n---\n")
 
