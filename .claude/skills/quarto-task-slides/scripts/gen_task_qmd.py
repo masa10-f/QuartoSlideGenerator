@@ -10,7 +10,7 @@ def sh(cmd, cwd=None):
 
 def parse_args():
     ap = argparse.ArgumentParser(description="Generate QMD for task slides")
-    ap.add_argument("--task", required=True)
+    ap.add_argument("--task", default="", help="Task ID (optional)")
     ap.add_argument("--repo", default=".")
     ap.add_argument("--since", default="")
     ap.add_argument("--until", default="HEAD")
@@ -36,9 +36,11 @@ def commit_list(repo, task_id, since, until, paths, extra_grep):
         args.append(f"{since}..{until}")
     else:
         args.append(until)
-    args += ["--regexp-ignore-case","--grep", task_id]
+    # Only add --grep filter if task_id is provided
+    if task_id:
+        args += ["--regexp-ignore-case","--grep", task_id]
     if extra_grep:
-        args += ["--grep", extra_grep]
+        args += ["--regexp-ignore-case", "--grep", extra_grep]
     if paths:
         args.append("--")
         args += [p for p in paths if p]
@@ -94,11 +96,21 @@ def md(s):  # minimal escape
     return s.replace("<","&lt;").replace(">","&gt;")
 
 def build_qmd(repo, args, commits):
-    title = args.title or f"Task Report: {args.task}"
+    if args.title:
+        title = args.title
+    elif args.task:
+        title = f"Task Report: {args.task}"
+    else:
+        title = "Commit Report"
+
     q = [fm(title)]
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     rng = f"{args.since+'..' if args.since else ''}{args.until}"
-    q.append(f"# {md(title)}\n\n- **Task**: `{md(args.task)}`  \n- **Repo**: `{md(os.path.abspath(repo))}`  \n- **Range**: `{md(rng)}`  \n- **Generated**: {now}\n\n---\n")
+
+    q.append(f"# {md(title)}\n\n")
+    if args.task:
+        q.append(f"- **Task**: `{md(args.task)}`  \n")
+    q.append(f"- **Repo**: `{md(os.path.abspath(repo))}`  \n- **Range**: `{md(rng)}`  \n- **Generated**: {now}\n\n---\n")
 
     authors = sorted({c["author"] for c in commits})
     commits_files = [files_for_commit(repo, c["sha"], args.paths) for c in commits]
