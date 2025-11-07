@@ -26,7 +26,7 @@ def parse_args():
     ap.add_argument("--title", default="")
     ap.add_argument("--out", required=True)
     ap.add_argument("--format", default="html", choices=["html","pdf"])
-    ap.add_argument("--summary-mode", default="none", choices=["none","template","ai","manual"],
+    ap.add_argument("--summary-mode", default="none", choices=["none","template","ai","manual","extract"],
                     help="Summary generation mode (default: none)")
     ap.add_argument("--summary-api-key", default="", help="API key for AI mode (or use ANTHROPIC_API_KEY env)")
     ap.add_argument("--summary-dir", default="", help="Directory for manual summaries (default: .commit-summaries)")
@@ -206,11 +206,15 @@ def generate_summary(repo, commit, diffstat, patch_preview, args):
         return ""
 
     # Manual mode: try to load from file first
-    if mode == "manual":
+    if mode == "manual" or mode == "ai":
+        # Both manual and ai modes read from .commit-summaries/
+        # For ai mode, Claude Code should have pre-generated summaries
         manual = load_manual_summary(repo, sha, args.summary_dir)
         if manual:
             return manual
-        return "⚠ No manual summary found"
+        if mode == "manual":
+            return "⚠ No manual summary found"
+        # For AI mode, try to load from summary dir, if not found continue to API fallback
 
     # Template mode: extract from commit body
     if mode == "template":
@@ -222,9 +226,9 @@ def generate_summary(repo, commit, diffstat, patch_preview, args):
             return body
         return "_No structured information found in commit message_"
 
-    # AI mode: generate using Claude API
+    # AI mode fallback: generate using Claude API (for non-Claude Code environments)
     if mode == "ai":
-        # Try AI generation
+        # Try AI generation via API as fallback
         ai_summary = generate_ai_summary(subject, body, diffstat, patch_preview, args.summary_api_key)
         return ai_summary
 
@@ -309,6 +313,32 @@ def build_qmd(repo, args, commits):
             q.append("```diff\n" + patch + "\n```\n\n")
     return "".join(q)
 
+def extract_commit_info(repo, commits, args):
+    """Extract commit information for AI summary generation"""
+    commit_info_list = []
+
+    for c in commits:
+        sha = c["sha"]
+        short = c["short"]
+        subject = c["subject"]
+        body = get_commit_body(repo, sha)
+        diffstat = diffstat_for_commit(repo, sha, args.paths)
+        patch = patch_for_commit(repo, sha, args.paths, 1000)
+
+        commit_info = {
+            "sha": sha,
+            "short": short,
+            "subject": subject,
+            "body": body,
+            "author": c["author"],
+            "date": c["date"],
+            "diffstat": diffstat,
+            "patch_preview": patch[:3000] if patch else ""  # Limit to 3000 chars
+        }
+        commit_info_list.append(commit_info)
+
+    return json.dumps(commit_info_list, indent=2, ensure_ascii=False)
+
 def main():
     a = parse_args()
     repo = os.path.abspath(a.repo)
@@ -318,6 +348,12 @@ def main():
     if not a.since:
         a.since = default_since(repo)
     commits = commit_list(repo, a.task, a.since, a.until, a.paths, a.grep)
+
+    # Extract mode: output commit info as JSON for Claude Code to process
+    if a.summary_mode == "extract":
+        print(extract_commit_info(repo, commits, a))
+        return
+
     qmd = build_qmd(repo, a, commits)
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     with open(a.out, "w", encoding="utf-8") as f:

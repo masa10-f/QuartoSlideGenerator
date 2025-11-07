@@ -52,12 +52,36 @@ version: 2.0.0
 
 ### 使用例
 
-#### AIモードでサマリー生成
+#### AIモードでサマリー生成（Claude Code統合）
+Claude Code環境では、外部APIキーは不要です。Claude Codeが自動的に要約を生成します。
+
+**ワークフロー（Claude Codeが自動実行）:**
+1. コミット情報を抽出（`--summary-mode ai`で実行）
+2. 各コミットの要約をClaude Codeが生成
+3. 要約を`.commit-summaries/`に保存
+4. スライドを生成（`--summary-mode manual`で自動再実行）
+
+**ユーザーの実行コマンド:**
+```bash
+bash .claude/skills/quarto-task-slides/scripts/task_slides.sh \
+  --since origin/main --until HEAD \
+  --summary-mode ai
+```
+
+**Claude Codeへの指示:**
+AIモードが指定された場合、以下の手順を自動実行すること：
+1. スクリプトがコミット情報を`.commit-summaries/.pending_summaries.json`に出力
+2. そのJSONファイルを読み込み、各コミットの要約を生成
+3. 各要約を`.commit-summaries/<short-sha>.md`として保存
+4. すべての要約生成後、`--summary-mode manual`でスライド生成を完了
+
+**非Claude Code環境の場合:**
 ```bash
 export ANTHROPIC_API_KEY="your-api-key"
 bash .claude/skills/quarto-task-slides/scripts/task_slides.sh \
   --since origin/main --until HEAD \
-  --summary-mode ai
+  --summary-mode ai \
+  --summary-api-key "$ANTHROPIC_API_KEY"
 ```
 
 #### テンプレートモードでサマリー生成

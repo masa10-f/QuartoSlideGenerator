@@ -32,34 +32,53 @@ bash .claude/skills/quarto-task-slides/scripts/task_slides.sh \
 
 ### 2. AI Mode
 
-Uses Claude API to generate intelligent summaries from commit data.
+Uses Claude to generate intelligent summaries from commit data.
+
+#### In Claude Code Environment (Recommended)
+
+When using Claude Code, **no API key is required**! Claude Code automatically generates summaries.
+
+```bash
+bash .claude/skills/quarto-task-slides/scripts/task_slides.sh \
+  --since origin/main --until HEAD \
+  --summary-mode ai
+```
+
+**How it works:**
+1. The script extracts commit information to `.commit-summaries/.pending_summaries.json`
+2. Claude Code automatically reads the JSON file
+3. Claude Code generates natural language summaries for each commit
+4. Summaries are saved as `.commit-summaries/<short-sha>.md`
+5. The script automatically re-runs with manual mode to generate slides
+
+**Advantages:**
+- No API key needed
+- No additional API costs
+- Seamless integration with Claude Code workflow
+- Uses the same Claude instance you're already interacting with
+
+#### Standalone Mode (without Claude Code)
+
+For use outside Claude Code environment:
 
 ```bash
 export ANTHROPIC_API_KEY="your-api-key-here"
 
 bash .claude/skills/quarto-task-slides/scripts/task_slides.sh \
   --since origin/main --until HEAD \
-  --summary-mode ai
-```
-
-Or pass the API key directly:
-
-```bash
-bash .claude/skills/quarto-task-slides/scripts/task_slides.sh \
-  --since origin/main --until HEAD \
   --summary-mode ai \
-  --summary-api-key "your-api-key"
+  --summary-api-key "$ANTHROPIC_API_KEY"
 ```
+
+**Requirements:**
+- `anthropic` package: `pip install anthropic`
+- Valid Anthropic API key
 
 **Best for:**
 - Comprehensive analysis of changes
 - Stakeholder presentations
 - When commit messages lack detail
 - Professional documentation
-
-**Requirements:**
-- `anthropic` package: `pip install anthropic`
-- Valid Anthropic API key
 
 ### 3. Manual Mode
 
