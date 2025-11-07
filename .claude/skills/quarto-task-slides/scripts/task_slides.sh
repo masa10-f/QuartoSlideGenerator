@@ -36,14 +36,21 @@ done
 if ! command -v git >/dev/null 2>&1; then echo "git not found"; exit 1; fi
 if ! command -v python3 >/dev/null 2>&1; then echo "python3 not found"; exit 1; fi
 if ! command -v quarto >/dev/null 2>&1; then echo "quarto not found"; exit 1; fi
-if [[ -z "$TASK_ID" ]]; then echo "--task is required"; exit 1; fi
 
 mkdir -p "$OUTDIR"
-QMD_PATH="$OUTDIR/task_${TASK_ID//\//-}.qmd"
+
+# Generate filename based on task_id or range
+if [[ -n "$TASK_ID" ]]; then
+  QMD_PATH="$OUTDIR/task_${TASK_ID//\//-}.qmd"
+else
+  # Use timestamp or range-based filename when no task_id
+  TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+  QMD_PATH="$OUTDIR/commits_${TIMESTAMP}.qmd"
+fi
 
 # Use SCRIPT_DIR to locate gen_task_qmd.py relative to this script
 python3 "$SCRIPT_DIR/gen_task_qmd.py" \
-  --task "$TASK_ID" --repo "$REPO_DIR" \
+  ${TASK_ID:+--task "$TASK_ID"} --repo "$REPO_DIR" \
   ${SINCE:+--since "$SINCE"} ${UNTIL:+--until "$UNTIL"} \
   ${PATHS:+--paths "$PATHS"} \
   ${EXTRA_GREP:+--grep "$EXTRA_GREP"} \
