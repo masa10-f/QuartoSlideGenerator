@@ -15,6 +15,9 @@ MAX_PATCH_LINES="600"
 TITLE=""
 FORMAT="html"
 OUTDIR="slides"
+SUMMARY_MODE="ai"
+SUMMARY_API_KEY=""
+SUMMARY_DIR=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -29,13 +32,25 @@ while [[ $# -gt 0 ]]; do
     --title) TITLE="$2"; shift 2;;
     --format) FORMAT="$2"; shift 2;;         # html | pdf
     --outdir) OUTDIR="$2"; shift 2;;
+    --summary-mode) SUMMARY_MODE="$2"; shift 2;;       # none | template | ai | manual
+    --summary-api-key) SUMMARY_API_KEY="$2"; shift 2;; # API key for AI mode
+    --summary-dir) SUMMARY_DIR="$2"; shift 2;;         # Directory for manual summaries
     *) echo "Unknown arg: $1"; exit 1;;
   esac
 done
 
 if ! command -v git >/dev/null 2>&1; then echo "git not found"; exit 1; fi
 if ! command -v python3 >/dev/null 2>&1; then echo "python3 not found"; exit 1; fi
-if ! command -v quarto >/dev/null 2>&1; then echo "quarto not found"; exit 1; fi
+
+# Check for quarto unless in AI mode without API key (Claude Code workflow)
+# In that case, quarto will be needed later after manual summary generation
+if [[ "$SUMMARY_MODE" == "ai" ]] && [[ -z "$SUMMARY_API_KEY" ]] && [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
+  # AI mode without API key - will exit early, quarto not needed yet
+  :
+else
+  # All other modes need quarto now
+  if ! command -v quarto >/dev/null 2>&1; then echo "quarto not found"; exit 1; fi
+fi
 
 mkdir -p "$OUTDIR"
 
@@ -48,6 +63,60 @@ else
   QMD_PATH="$OUTDIR/commits_${TIMESTAMP}.qmd"
 fi
 
+# Handle AI mode: check if API key is available
+if [[ "$SUMMARY_MODE" == "ai" ]]; then
+  # Check if API key is provided (via flag or environment variable)
+  if [[ -z "$SUMMARY_API_KEY" ]] && [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
+    # No API key - use Claude Code workflow (two-step process)
+    echo "AI summary mode detected (Claude Code workflow)."
+    echo "Extracting commit information for Claude Code to summarize..."
+    COMMIT_INFO_JSON=$(python3 "$SCRIPT_DIR/gen_task_qmd.py" \
+      ${TASK_ID:+--task "$TASK_ID"} --repo "$REPO_DIR" \
+      ${SINCE:+--since "$SINCE"} ${UNTIL:+--until "$UNTIL"} \
+      ${PATHS:+--paths "$PATHS"} \
+      ${EXTRA_GREP:+--grep "$EXTRA_GREP"} \
+      --out "$QMD_PATH" \
+      --format "$FORMAT" \
+      --summary-mode extract)
+
+    # Create summaries directory
+    if [[ -z "$SUMMARY_DIR" ]]; then
+      SUMMARY_DIR=".commit-summaries"
+    fi
+    mkdir -p "$SUMMARY_DIR"
+
+    # Save commit info to a temp file for Claude Code to process
+    COMMIT_INFO_FILE="$SUMMARY_DIR/.pending_summaries.json"
+    echo "$COMMIT_INFO_JSON" > "$COMMIT_INFO_FILE"
+
+    echo ""
+    echo "=================================================="
+    echo "AI Summary Generation Required"
+    echo "=================================================="
+    echo ""
+    echo "Commit information has been extracted to:"
+    echo "  $COMMIT_INFO_FILE"
+    echo ""
+    echo "Claude Code should now generate summaries for these commits."
+    echo "After summaries are generated in $SUMMARY_DIR/, this script"
+    echo "will continue with slide generation."
+    echo ""
+    echo "Please ask Claude Code to:"
+    echo "  1. Read the commit info from: $COMMIT_INFO_FILE"
+    echo "  2. Generate natural language summaries for each commit"
+    echo "  3. Save summaries as: $SUMMARY_DIR/<short-sha>.md"
+    echo ""
+    echo "Once summaries are ready, re-run with --summary-mode manual"
+    echo "=================================================="
+    exit 0
+  else
+    # API key is available - proceed with single-command workflow
+    echo "AI summary mode detected with API key."
+    echo "Will generate summaries using Anthropic API and create slides in one step."
+    # Continue to normal execution below (no exit)
+  fi
+fi
+
 # Use SCRIPT_DIR to locate gen_task_qmd.py relative to this script
 python3 "$SCRIPT_DIR/gen_task_qmd.py" \
   ${TASK_ID:+--task "$TASK_ID"} --repo "$REPO_DIR" \
@@ -58,6 +127,9 @@ python3 "$SCRIPT_DIR/gen_task_qmd.py" \
   --out "$QMD_PATH" \
   --format "$FORMAT" \
   --max-patch-lines "$MAX_PATCH_LINES" \
+  --summary-mode "$SUMMARY_MODE" \
+  ${SUMMARY_API_KEY:+--summary-api-key "$SUMMARY_API_KEY"} \
+  ${SUMMARY_DIR:+--summary-dir "$SUMMARY_DIR"} \
   $( [[ "$INCLUDE_DIFF" == "true" ]] && echo "--include-diff" )
 
 # Quarto render

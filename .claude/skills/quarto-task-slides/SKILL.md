@@ -15,6 +15,7 @@ version: 2.0.0
 ## 前提
 - 実行環境に `git`, `python3`, `quarto` が入っていること。
 - PDF を出す場合は TinyTeX などの LaTeX が必要（`quarto install tinytex`）。
+- AIサマリー生成を使う場合は `anthropic` パッケージが必要（`pip install anthropic`）。
 
 ## 入力パラメータ
 - `task_id`（**オプション**）: 例 `TASK-123` / `feature/foo`。省略時はコミットメッセージフィルタなし
@@ -27,6 +28,93 @@ version: 2.0.0
 - `title`（任意）
 - `format`（`html` | `pdf`、既定 `html`）
 - `outdir`（既定 `slides/`）
+- `summary_mode`（既定 `ai`）: `none` | `template` | `ai` | `manual` - コミットサマリー生成モード
+- `summary_api_key`（任意）: AI モード用の API キー（環境変数 `ANTHROPIC_API_KEY` も利用可）
+- `summary_dir`（任意）: 手動サマリーファイル用ディレクトリ（既定 `.commit-summaries/`）
+
+## コミットサマリー生成機能
+
+各コミットの変更内容を自然言語で要約し、スライドに含めることができる。
+
+### サマリーモード
+
+1. **`none`**: サマリーを生成しない
+2. **`template`**: コミットメッセージ本文から構造化情報を抽出
+   - リスト形式の情報（`-`, `*`, `+` で始まる行）を自動認識
+   - 詳細な説明文を含める
+3. **`ai`（既定）**: Claude Code を使用して自動生成（Claude Code環境ではAPIキー不要）
+   - コミットメッセージ、diffstat、コード変更から包括的な要約を生成
+   - 非技術系ステークホルダーにもわかりやすい説明
+   - 何が変更され、なぜ変更されたかを明確化
+4. **`manual`**: 事前に作成したサマリーファイルを読み込む
+   - `.commit-summaries/<sha>.md` または `.commit-summaries/<short-sha>.md` から読み込み
+   - カスタムディレクトリも指定可能
+
+### 使用例
+
+#### AIモードでサマリー生成
+
+AIモードは2つのワークフローをサポートします：
+
+**1. Claude Code統合ワークフロー（APIキー不要）**
+
+Claude Code環境で、APIキーを指定せずに実行した場合：
+
+```bash
+# デフォルトでAIモード（APIキーなし）
+bash .claude/skills/quarto-task-slides/scripts/task_slides.sh \
+  --since origin/main --until HEAD
+```
+
+**動作:**
+1. スクリプトがコミット情報を`.commit-summaries/.pending_summaries.json`に抽出
+2. Claude Codeに要約生成を依頼（メッセージ表示）
+3. Claude Codeが各コミットの要約を生成し`.commit-summaries/<short-sha>.md`に保存
+4. `--summary-mode manual`で再実行してスライド生成
+
+**Claude Codeへの指示:**
+上記メッセージが表示された場合、自動的に：
+1. JSONファイルを読み込み
+2. 各コミットの要約を生成
+3. 要約ファイルを保存
+4. `--summary-mode manual`でスライド生成を完了
+
+**2. APIキー使用ワークフロー（1コマンド完了）**
+
+Anthropic APIキーを指定した場合、1コマンドで完了：
+
+```bash
+export ANTHROPIC_API_KEY="your-api-key"
+bash .claude/skills/quarto-task-slides/scripts/task_slides.sh \
+  --since origin/main --until HEAD
+
+# または --summary-api-key で直接指定
+bash .claude/skills/quarto-task-slides/scripts/task_slides.sh \
+  --since origin/main --until HEAD \
+  --summary-api-key "$ANTHROPIC_API_KEY"
+```
+
+**動作:**
+1. コミット情報を抽出
+2. Anthropic APIで各コミットの要約を生成
+3. スライドを生成
+4. 完了（1コマンドで完結）
+
+#### テンプレートモードでサマリー生成
+```bash
+bash .claude/skills/quarto-task-slides/scripts/task_slides.sh \
+  --task TASK-123 \
+  --summary-mode template
+```
+
+#### 手動サマリーファイルを使用
+```bash
+# .commit-summaries/abc1234.md に事前にサマリーを作成
+bash .claude/skills/quarto-task-slides/scripts/task_slides.sh \
+  --since origin/main --until HEAD \
+  --summary-mode manual \
+  --summary-dir .commit-summaries
+```
 
 ## 自然言語での範囲指定の解釈
 

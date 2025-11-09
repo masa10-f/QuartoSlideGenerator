@@ -14,3 +14,6 @@ slides/
 # Python
 __pycache__/
 *.pyc
+
+# Temporary commit summary files
+.commit-summaries/.pending_summaries.json
