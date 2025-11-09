@@ -52,37 +52,53 @@ version: 2.0.0
 
 ### 使用例
 
-#### AIモードでサマリー生成（Claude Code統合）
-Claude Code環境では、外部APIキーは不要です。Claude Codeが自動的に要約を生成します。
+#### AIモードでサマリー生成
 
-**ワークフロー（Claude Codeが自動実行）:**
-1. コミット情報を抽出（`--summary-mode ai`で実行）
-2. 各コミットの要約をClaude Codeが生成
-3. 要約を`.commit-summaries/`に保存
-4. スライドを生成（`--summary-mode manual`で自動再実行）
+AIモードは2つのワークフローをサポートします：
 
-**ユーザーの実行コマンド:**
+**1. Claude Code統合ワークフロー（APIキー不要）**
+
+Claude Code環境で、APIキーを指定せずに実行した場合：
+
 ```bash
+# デフォルトでAIモード（APIキーなし）
 bash .claude/skills/quarto-task-slides/scripts/task_slides.sh \
-  --since origin/main --until HEAD \
-  --summary-mode ai
+  --since origin/main --until HEAD
 ```
 
-**Claude Codeへの指示:**
-AIモードが指定された場合、以下の手順を自動実行すること：
-1. スクリプトがコミット情報を`.commit-summaries/.pending_summaries.json`に出力
-2. そのJSONファイルを読み込み、各コミットの要約を生成
-3. 各要約を`.commit-summaries/<short-sha>.md`として保存
-4. すべての要約生成後、`--summary-mode manual`でスライド生成を完了
+**動作:**
+1. スクリプトがコミット情報を`.commit-summaries/.pending_summaries.json`に抽出
+2. Claude Codeに要約生成を依頼（メッセージ表示）
+3. Claude Codeが各コミットの要約を生成し`.commit-summaries/<short-sha>.md`に保存
+4. `--summary-mode manual`で再実行してスライド生成
 
-**非Claude Code環境の場合:**
+**Claude Codeへの指示:**
+上記メッセージが表示された場合、自動的に：
+1. JSONファイルを読み込み
+2. 各コミットの要約を生成
+3. 要約ファイルを保存
+4. `--summary-mode manual`でスライド生成を完了
+
+**2. APIキー使用ワークフロー（1コマンド完了）**
+
+Anthropic APIキーを指定した場合、1コマンドで完了：
+
 ```bash
 export ANTHROPIC_API_KEY="your-api-key"
 bash .claude/skills/quarto-task-slides/scripts/task_slides.sh \
+  --since origin/main --until HEAD
+
+# または --summary-api-key で直接指定
+bash .claude/skills/quarto-task-slides/scripts/task_slides.sh \
   --since origin/main --until HEAD \
-  --summary-mode ai \
   --summary-api-key "$ANTHROPIC_API_KEY"
 ```
+
+**動作:**
+1. コミット情報を抽出
+2. Anthropic APIで各コミットの要約を生成
+3. スライドを生成
+4. 完了（1コマンドで完結）
 
 #### テンプレートモードでサマリー生成
 ```bash
